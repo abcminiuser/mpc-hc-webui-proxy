@@ -86,7 +86,10 @@ class VariablesPage():
         player_variables = self._get_mpchc_variables()
 
         for k in self.VARIABLE_REDACTIONS:
-            player_variables.pop(k)
+            try:
+                player_variables.pop(k)
+            except KeyError:
+                pass
 
         template_values = {
             "{FILE}"           : player_variables.get("file"          , ""),
