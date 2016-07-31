@@ -14,7 +14,10 @@ from http import server
 import re
 import requests
 from urllib.parse import urlparse, parse_qs
+import logging
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
+logger = logging.getLogger(__name__)
 
 
 # Port to serve on
@@ -264,7 +267,10 @@ class RequestHandler(server.BaseHTTPRequestHandler):
         for k in form.keys():
             request_params[k] = [form[k].value]
 
-        self._process_request(request_path, request_params)
+        try:
+            self._process_request(request_path, request_params)
+        except Exception as e:
+            logging.exception(e)
 
 
     def do_GET(self):
@@ -273,10 +279,21 @@ class RequestHandler(server.BaseHTTPRequestHandler):
         request_path = request.path
         request_params = parse_qs(request.query)
 
-        self._process_request(request_path, request_params)
+        try:
+            self._process_request(request_path, request_params)
+        except Exception as e:
+            logging.exception(e)
+
+    def log_message(self, format, *args):
+        logger.info(format % args)
 
 
 if __name__ == "__main__":
-    serveraddr = ('', PORT)
-    srvr = server.HTTPServer(serveraddr, RequestHandler)
-    srvr.serve_forever()
+    httpd = server.HTTPServer(('', PORT), RequestHandler)
+
+    try:
+         httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+
+    httpd.server_close()
