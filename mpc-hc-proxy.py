@@ -178,6 +178,9 @@ class CommandPage():
         996, # Jump to Beginning
         922, # Next
         921, # Previous
+        909, # Volume Mute
+        908, # Volume Down
+        907, # Volume Up
     ]
 
     def __init__(self, url):
