@@ -11,10 +11,12 @@
 
 import cgi
 from http import server
+import logging
 import re
 import requests
+import time
 from urllib.parse import urlparse, parse_qs
-import logging
+
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
 logger = logging.getLogger(__name__)
@@ -65,24 +67,40 @@ class VariablesPage():
         "filedir",
     ]
 
+    # Cached values for up to this period of time since the last successful fetch
+    MAX_CACHE_AGE_SECONDS = 10
+
 
     def __init__(self, url):
         self._url = url
+        self._variable_cache     = dict()
+        self._variable_cache_age = time.clock()
 
 
     def _get_mpchc_variables(self):
-        player_variables = dict()
+        current_time = time.clock()
+
+        # If the cached values are too old, dump the cache
+        if current_time - self._variable_cache_age > self.MAX_CACHE_AGE_SECONDS:
+           self._variable_cache = dict()
 
         try:
-            response = requests.get("{}/variables.html".format(self._url), data=None, timeout=1)
+            # To to fetch the new values from the running MPC-HC instance
+            response = requests.get("{}/variables.html".format(self._url),
+                                    data=None, timeout=2)
 
-            mpchc_variables = re.findall(r'<p id="(.+?)">(.+?)</p>', response.text)
+            # Update cache with the processed variables
+            mpchc_variables = re.findall(r'<p id="(.+?)">(.+?)</p>',
+                                         response.text)
             for var in mpchc_variables:
-                player_variables[var[0]] = var[1].lower()
+                self._variable_cache[var[0]] = var[1].lower()
+
+            self._variable_cache_age = current_time
         except requests.exceptions.ConnectionError:
+            # Failed to connect to MPC-HC, fall back on the cache until expiry
             pass
 
-        return player_variables
+        return self._variable_cache
 
 
     def render(self, params):
@@ -201,7 +219,7 @@ class CommandPage():
                 "wm_command" : command_id
             }
 
-            requests.get("{}/command.html".format(self._url), data=data, timeout=1)
+            requests.get("{}/command.html".format(self._url), data=data, timeout=2)
         except requests.exceptions.ConnectionError:
             pass
 
