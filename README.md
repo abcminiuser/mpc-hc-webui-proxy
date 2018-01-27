@@ -25,7 +25,9 @@ Currently NOT Supported:
 
 ## Setup
 
-Enable the Web UI in MPC-HC's options screen. Make sure the option to only allow requests from `localhost` is set, so that the script can interact with it but remote clients cannot access the real MPC-HC interface. Choose a port that is not the default of 13579.
+![MPC-HC Settings](Settings.png)
+
+Enable the Web UI in MPC-HC's options screen. Make sure the option to only allow requests from `localhost` is set, so that the script can interact with it but remote clients cannot access the real MPC-HC interface. Choose a port that is not the default of 13579 (as the proxy script will bind to this port instead).
 
 Currently, configuring the script requires hand-editing. Edit the following variables in the script:
 
