@@ -74,6 +74,7 @@ class MPCHC_Proxy_Client(object):
         app.router.add_get('/', self.handle_page_root)
         app.router.add_get('/variables.html', self.handle_page_variables)
         app.router.add_get('/info.html', self.handle_page_info)
+        app.router.add_get('/status.html', self.handle_page_status)
         app.router.add_get('/command.html', self.handle_page_command)
 
 
@@ -85,7 +86,9 @@ class MPCHC_Proxy_Client(object):
             data = {
                 "wm_command" : command_id
             }
-            await self.session.get('http://127.0.0.1:{}/command.html'.format(self.port), params=data)
+
+            with aiohttp.Timeout(.025):
+                await self.session.get('http://127.0.0.1:{}/command.html'.format(self.port), params=data)
         except Exception as e:
             pass
 
@@ -95,11 +98,11 @@ class MPCHC_Proxy_Client(object):
             self.session = aiohttp.ClientSession()
 
         try:
-            res = await self.session.get('http://127.0.0.1:{}/variables.html'.format(self.port))
-            raw = await res.text()
+            with aiohttp.Timeout(.025):
+                res = await self.session.get('http://127.0.0.1:{}/variables.html'.format(self.port))
+                raw = await res.text()
         except Exception as e:
-            self.variables = dict()
-            return
+            return dict()
 
         mpchc_variables_raw = re.findall(r'<p id="(.+?)">(.+?)</p>', raw)
         mpchc_variables_parsed = dict()
@@ -203,6 +206,13 @@ class MPCHC_Proxy_Client(object):
         <p id="mpchc_np">&laquo; MPC-HC v{VERSION} &bull; {FILE} &bull; {POSITIONSTRING}/{DURATIONSTRING} &bull; {SIZE} &raquo;</p>
     </body>
 </html>'''
+
+        page_text = await self._render_template(TEMPLATE)
+        return web.Response(text=page_text)
+
+
+    async def handle_page_status(self, request):
+        TEMPLATE = '''OnStatus("{FILE}", "{STATESTRING}", {POSITION}, "{POSITIONSTRING}", {DURATION}, "{DURATIONSTRING}", {MUTED}, {VOLUMELEVEL}, "{FILE}")'''
 
         page_text = await self._render_template(TEMPLATE)
         return web.Response(text=page_text)
