@@ -10,7 +10,6 @@
 
 import re
 import logging
-import asyncio
 import aiohttp
 from aiohttp import web
 
@@ -106,7 +105,7 @@ class MPCHC_Proxy_Client(object):
         mpchc_variables_parsed = dict()
 
         for (var_name, var_value) in mpchc_variables_raw:
-            if not var_name in self.redactions:
+            if var_name not in self.redactions:
                 mpchc_variables_parsed[var_name] = var_value.lower()
 
         return mpchc_variables_parsed
