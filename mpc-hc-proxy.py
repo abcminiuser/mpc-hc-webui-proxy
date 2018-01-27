@@ -1,21 +1,18 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 
 """
-    Media Player Classic - Home Cinema
-
+    Media Player Classic - Home Cinema (and Derivatives)
     Web API proxy, see README.md for more details.
 
     By Dean Camera, dean [at] fourwalledcubicle [dot] com
         Released under a MIT license, see LICENSE.md
 """
 
-import cgi
-from http import server
-import logging
 import re
-import requests
-import time
-from urllib.parse import urlparse, parse_qs
+import logging
+import asyncio
+import aiohttp
+from aiohttp import web
 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
@@ -28,10 +25,144 @@ PORT = 13579
 # Port to communicate with the MPC-HC web API
 MPCHC_PORT = 13580
 
+# List of MPC-HC state variables which should *not* be passed through the proxy.
+VARIABLE_REDACTIONS = [
+    "file",
+    "filepatharg",
+    "filepath",
+    "filedirarg",
+    "filedir",
+]
+
+# List of allowable MPC-HC commands, Commands not listed here will be rejected.
+ALLOWED_COMMAND_IDS = [
+    889, # Play/Pause
+    887, # Play
+    888, # Pause
+    890, # Stop
+    891, # Frame-step
+    892, # Frame-step back
+    893, # Go To
+    895, # Increase Rate
+    894, # Decrease Rate
+    896, # Reset Rate
+    905, # Audio Delay +10 ms
+    906, # Audio Delay -10 ms
+    900, # Jump Forward (small)
+    899, # Jump Backward (small)
+    902, # Jump Forward (medium)
+    901, # Jump Backward (medium)
+    904, # Jump Forward (large)
+    903, # Jump Backward (large)
+    898, # Jump Forward (keyframe)
+    897, # Jump Backward (keyframe)
+    996, # Jump to Beginning
+    922, # Next
+    921, # Previous
+    909, # Volume Mute
+    908, # Volume Down
+    907, # Volume Up
+]
 
 
-class VariablesPage():
-    TEMPLATE = '''<!DOCTYPE html>
+class MPCHC_Proxy_Client(object):
+    def __init__(self, app, port, redactions=None, commands=None):
+        self.port = port
+        self.session = None
+        self.redactions = redactions or []
+        self.commands = commands or []
+
+        app.router.add_get('/', self.handle_page_root)
+        app.router.add_get('/variables.html', self.handle_page_variables)
+        app.router.add_get('/info.html', self.handle_page_info)
+        app.router.add_get('/command.html', self.handle_page_command)
+
+
+    async def _send_command(self, command_id):
+        if self.session is None:
+            self.session = aiohttp.ClientSession()
+
+        try:
+            data = {
+                "wm_command" : command_id
+            }
+            await self.session.get('http://127.0.0.1:{}/command.html'.format(self.port), params=data)
+        except Exception as e:
+            pass
+
+
+    async def _get_variables(self):
+        if self.session is None:
+            self.session = aiohttp.ClientSession()
+
+        try:
+            res = await self.session.get('http://127.0.0.1:{}/variables.html'.format(self.port))
+            raw = await res.text()
+        except Exception as e:
+            self.variables = dict()
+            return
+
+        mpchc_variables_raw = re.findall(r'<p id="(.+?)">(.+?)</p>', raw)
+        mpchc_variables_parsed = dict()
+
+        for (var_name, var_value) in mpchc_variables_raw:
+            if not var_name in self.redactions:
+                mpchc_variables_parsed[var_name] = var_value.lower()
+
+        return mpchc_variables_parsed
+
+
+    async def _render_template(self, page_template, template_values=None):
+        mpchc_variables = await self._get_variables()
+
+        if template_values is None:
+            template_values = dict()
+
+        template_values.update({
+            "{FILE}"           : mpchc_variables.get("file"          , ""),
+            "{FILEPATHARG}"    : mpchc_variables.get("filepatharg"   , ""),
+            "{FILEPATH}"       : mpchc_variables.get("filepath"      , ""),
+            "{FILEDIRARG}"     : mpchc_variables.get("filedirarg"    , ""),
+            "{FILEDIR}"        : mpchc_variables.get("filedir"       , ""),
+            "{STATE}"          : mpchc_variables.get("state"         , "0"),
+            "{STATESTRING}"    : mpchc_variables.get("statestring"   , "Stopped"),
+            "{POSITION}"       : mpchc_variables.get("position"      , "0"),
+            "{POSITIONSTRING}" : mpchc_variables.get("positionstring", "00:00:00"),
+            "{DURATION}"       : mpchc_variables.get("duration"      , "0"),
+            "{DURATIONSTRING}" : mpchc_variables.get("durationstring", "00:00:00"),
+            "{VOLUMELEVEL}"    : mpchc_variables.get("volumelevel"   , "0"),
+            "{MUTED}"          : mpchc_variables.get("muted"         , "0"),
+            "{PLAYBACKRATE}"   : mpchc_variables.get("playbackrate"  , "1"),
+            "{SIZE}"           : mpchc_variables.get("size"          , "1"),
+            "{RELOADTIME}"     : mpchc_variables.get("reloadtime"    , "0"),
+            "{VERSION}"        : mpchc_variables.get("version"       , "1.0.0.0"),
+        })
+
+        page_data = str(page_template)
+        for k, v in template_values.items():
+            page_data = page_data.replace(k, v)
+
+        return page_data
+
+
+    async def handle_page_root(self, request):
+        TEMPLATE = '''<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>MPC-HC Web Server</title>
+    </head>
+    <body>
+        Proxy is running.
+    </body>
+</html>'''
+
+        page_text = await self._render_template(TEMPLATE)
+        return web.Response(text=page_text)
+
+
+    async def handle_page_variables(self, request):
+        TEMPLATE = '''<!DOCTYPE html>
 <html lang="en">
     <head>
         <meta charset="utf-8">
@@ -58,90 +189,12 @@ class VariablesPage():
     </body>
 </html>'''
 
-    # List of MPC-HC state variables which should *not* be passed through the proxy.
-    VARIABLE_REDACTIONS = [
-        "file",
-        "filepatharg",
-        "filepath",
-        "filedirarg",
-        "filedir",
-    ]
-
-    # Cached values for up to this period of time since the last successful fetch
-    MAX_CACHE_AGE_SECONDS = 10
+        page_text = await self._render_template(TEMPLATE)
+        return web.Response(text=page_text)
 
 
-    def __init__(self, url):
-        self._url = url
-        self._variable_cache     = dict()
-        self._variable_cache_age = time.clock()
-
-
-    def _get_mpchc_variables(self):
-        current_time = time.clock()
-
-        # If the cached values are too old, dump the cache
-        if current_time - self._variable_cache_age > self.MAX_CACHE_AGE_SECONDS:
-           self._variable_cache = dict()
-
-        try:
-            # To to fetch the new values from the running MPC-HC instance
-            response = requests.get("{}/variables.html".format(self._url),
-                                    data=None, timeout=2)
-
-            # Update cache with the processed variables
-            mpchc_variables = re.findall(r'<p id="(.+?)">(.+?)</p>',
-                                         response.text)
-            for var in mpchc_variables:
-                self._variable_cache[var[0]] = var[1].lower()
-
-            self._variable_cache_age = current_time
-        except requests.exceptions.ConnectionError:
-            # Failed to connect to MPC-HC, fall back on the cache until expiry
-            pass
-
-        return self._variable_cache
-
-
-    def render(self, params):
-        player_variables = self._get_mpchc_variables()
-
-        for k in self.VARIABLE_REDACTIONS:
-            try:
-                player_variables.pop(k)
-            except KeyError:
-                pass
-
-        template_values = {
-            "{FILE}"           : player_variables.get("file"          , ""),
-            "{FILEPATHARG}"    : player_variables.get("filepatharg"   , ""),
-            "{FILEPATH}"       : player_variables.get("filepath"      , ""),
-            "{FILEDIRARG}"     : player_variables.get("filedirarg"    , ""),
-            "{FILEDIR}"        : player_variables.get("filedir"       , ""),
-            "{STATE}"          : player_variables.get("state"         , "0"),
-            "{STATESTRING}"    : player_variables.get("statestring"   , "Stopped"),
-            "{POSITION}"       : player_variables.get("position"      , "0"),
-            "{POSITIONSTRING}" : player_variables.get("positionstring", "00:00:00"),
-            "{DURATION}"       : player_variables.get("duration"      , "0"),
-            "{DURATIONSTRING}" : player_variables.get("durationstring", "00:00:00"),
-            "{VOLUMELEVEL}"    : player_variables.get("volumelevel"   , "0"),
-            "{MUTED}"          : player_variables.get("muted"         , "0"),
-            "{PLAYBACKRATE}"   : player_variables.get("playbackrate"  , "1"),
-            "{SIZE}"           : player_variables.get("size"          , "1"),
-            "{RELOADTIME}"     : player_variables.get("reloadtime"    , "0"),
-            "{VERSION}"        : player_variables.get("version"       , "1.0.0.0"),
-        }
-
-        page_data = str(self.TEMPLATE)
-        for k, v in template_values.items():
-            page_data = page_data.replace(k, v)
-
-        return page_data
-
-
-
-class InfoPage(VariablesPage):
-    TEMPLATE = '''<!DOCTYPE html>
+    async def handle_page_info(self, request):
+        TEMPLATE = '''<!DOCTYPE html>
 <html lang="en">
     <head>
         <meta charset="utf-8">
@@ -152,15 +205,12 @@ class InfoPage(VariablesPage):
     </body>
 </html>'''
 
+        page_text = await self._render_template(TEMPLATE)
+        return web.Response(text=page_text)
 
 
-class StatusPage(VariablesPage):
-    TEMPLATE = '''OnStatus("{FILE}", "{STATESTRING}", {POSITION}, "{POSITIONSTRING}", {DURATION}, "{DURATIONSTRING}", {MUTED}, {VOLUMELEVEL}, "{FILE}")'''
-
-
-
-class CommandPage():
-    TEMPLATE = '''<!DOCTYPE html>
+    async def handle_page_command(self, request):
+        TEMPLATE = '''<!DOCTYPE html>
 <html lang="en">
     <head>
         <meta charset="utf-8">
@@ -171,150 +221,23 @@ class CommandPage():
     </body>
 </html>'''
 
-    # List of allowable MPC-HC commands, Commands not listed here will be rejected.
-    ALLOWED_COMMAND_IDS = [
-        889, # Play/Pause
-        887, # Play
-        888, # Pause
-        890, # Stop
-        891, # Frame-step
-        892, # Frame-step back
-        893, # Go To
-        895, # Increase Rate
-        894, # Decrease Rate
-        896, # Reset Rate
-        905, # Audio Delay +10 ms
-        906, # Audio Delay -10 ms
-        900, # Jump Forward (small)
-        899, # Jump Backward (small)
-        902, # Jump Forward (medium)
-        901, # Jump Backward (medium)
-        904, # Jump Forward (large)
-        903, # Jump Backward (large)
-        898, # Jump Forward (keyframe)
-        897, # Jump Backward (keyframe)
-        996, # Jump to Beginning
-        922, # Next
-        921, # Previous
-        909, # Volume Mute
-        908, # Volume Down
-        907, # Volume Up
-    ]
+        command_id = request.query.get('wm_command', None)
 
-    def __init__(self, url):
-        self._url = url
+        template_values = dict()
 
+        if command_id is None:
+            template_values['{BODY}'] = 'Command not specified.'
+        elif command_id in self.commands:
+            template_values['{BODY}'] = 'Command {} disallowed by proxy.'.format(command_id)
+        else:
+            await self._send_command(command_id)
+            template_values['{BODY}'] = 'Command {} accepted.'.format(command_id)
 
-    def render(self, params):
-        try:
-            command_id = int(params.get("wm_command", None)[0])
-        except:
-            command_id = None
-
-        if not command_id in self.ALLOWED_COMMAND_IDS:
-           return self.TEMPLATE.replace("{BODY}", "<p>This command has been disallowed.</p>")
-
-        try:
-            data = {
-                "wm_command" : command_id
-            }
-
-            requests.get("{}/command.html".format(self._url), data=data, timeout=2)
-        except requests.exceptions.ConnectionError:
-            pass
-
-        return ""
-
-
-
-class RootPage():
-    TEMPLATE = '''<!DOCTYPE html>
-<html lang="en">
-    <head>
-        <meta charset="utf-8">
-        <title>MPC-HC Web Server</title>
-    </head>
-    <body>
-        Proxy is running.
-    </body>
-</html>'''
-
-
-    def __init__(self, url):
-        self._url = url
-
-
-    def render(self, params):
-        return self.TEMPLATE
-
-
-
-class RequestHandler(server.BaseHTTPRequestHandler):
-    PAGES = {
-       "/variables.html" : VariablesPage,
-       "/info.html"      : InfoPage,
-       "/status.html"    : StatusPage,
-       "/command.html"   : CommandPage,
-       "/"               : RootPage,
-    }
-
-    def _process_request(self, path, params):
-        mpchc_base_url = "http://127.0.0.1:{}".format(MPCHC_PORT)
-
-        page_handler = RequestHandler.PAGES.get(path)
-        if page_handler is None:
-             self.send_error(404, message="Invalid or unsupported MPC-HC Web API URL.")
-             return
-
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html')
-        self.end_headers()
-
-        response = page_handler(mpchc_base_url).render(params)
-        self.wfile.write(bytes(response, 'utf-8'))
-
-
-    def do_POST(self):
-        form = cgi.FieldStorage(
-            fp=self.rfile,
-            headers=self.headers,
-            environ={'REQUEST_METHOD':'POST',
-                     'CONTENT_TYPE':self.headers['Content-Type'],
-                     })
-
-        request_path = self.path
-        request_params = dict()
-
-        for k in form.keys():
-            request_params[k] = [form[k].value]
-
-        try:
-            self._process_request(request_path, request_params)
-        except Exception as e:
-            logging.exception(e)
-
-
-    def do_GET(self):
-        request = urlparse(self.path)
-
-        request_path = request.path
-        request_params = parse_qs(request.query)
-
-        try:
-            self._process_request(request_path, request_params)
-        except Exception as e:
-            logging.exception(e)
-
-    def log_message(self, format, *args):
-        logger.info(format % args)
+        page_text = await self._render_template(TEMPLATE, template_values=template_values)
+        return web.Response(text=page_text)
 
 
 if __name__ == "__main__":
-    httpd = server.HTTPServer(('', PORT), RequestHandler)
-
-    try:
-         httpd.serve_forever()
-    except KeyboardInterrupt:
-        pass
-
-    httpd.server_close()
+    app = web.Application()
+    client = MPCHC_Proxy_Client(app, port=MPCHC_PORT, redactions=VARIABLE_REDACTIONS, commands=ALLOWED_COMMAND_IDS)
+    web.run_app(app, port=PORT)

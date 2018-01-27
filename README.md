@@ -1,6 +1,6 @@
-# MPC-HC Web API Proxy
+# MPC-HC/MPC-BE Web API Proxy
 
-The [MPC-HC](https://mpc-hc.org/) application is a wonderful, lightweight media player, used by many around the world. As part of its feature-set it contains the ability to listen on a local port, acting as a HTTP server with various remote control functions. This is very convenient for making local integrations (for example, via [Home Assistant](http://home-assistant.io/) for home automation) or for remote control over a LAN using one of the dozen or more phone applications.
+The [MPC-HC](https://mpc-hc.org/) application, and it's derivative [MPC-BE](https://sourceforge.net/projects/mpcbe/), is a wonderful and lightweight media player, used by many around the world. As part of its feature-set it contains the ability to listen on a local port, acting as a HTTP server with various remote control functions. This is very convenient for making local integrations (for example, via [Home Assistant](http://home-assistant.io/) for home automation) or for remote control over a LAN using one of the dozen or more phone applications.
 
 The major downside to this is that the MPC-HC web interface is hilariously insecure. There is no authentication, and remote clients can happily see your preferences for *My Little Pony* reruns, make your PC play arbitrary files, or just generally mess with your media client.
 
@@ -8,7 +8,11 @@ This script acts as a form of local proxy/firewall, emulating a limited version 
 
 ## Dependencies
 
-Python 3.x is required.
+Python 3.5 or newer is required. The `aiohttp` library is also required:
+
+```
+pip install aiohttp
+```
 
 ## Feature Support
 
