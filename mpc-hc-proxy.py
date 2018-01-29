@@ -87,7 +87,7 @@ class MPCHC_Proxy_Client(object):
                 "wm_command" : command_id
             }
 
-            with aiohttp.Timeout(.025):
+            with aiohttp.Timeout(1):
                 await self.session.get('http://127.0.0.1:{}/command.html'.format(self.port), params=data)
         except Exception as e:
             pass
@@ -98,7 +98,7 @@ class MPCHC_Proxy_Client(object):
             self.session = aiohttp.ClientSession()
 
         try:
-            with aiohttp.Timeout(.025):
+            with aiohttp.Timeout(1):
                 res = await self.session.get('http://127.0.0.1:{}/variables.html'.format(self.port))
                 raw = await res.text()
         except Exception as e:
