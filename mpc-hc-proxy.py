@@ -160,7 +160,7 @@ class MPCHC_Proxy_Client(object):
 </html>'''
 
         page_text = await self._render_template(TEMPLATE)
-        return web.Response(text=page_text)
+        return web.Response(text=page_text, content_type='text/html')
 
 
     async def handle_page_variables(self, request):
@@ -192,7 +192,7 @@ class MPCHC_Proxy_Client(object):
 </html>'''
 
         page_text = await self._render_template(TEMPLATE)
-        return web.Response(text=page_text)
+        return web.Response(text=page_text, content_type='text/html')
 
 
     async def handle_page_info(self, request):
@@ -208,7 +208,7 @@ class MPCHC_Proxy_Client(object):
 </html>'''
 
         page_text = await self._render_template(TEMPLATE)
-        return web.Response(text=page_text)
+        return web.Response(text=page_text, content_type='text/html')
 
 
     async def handle_page_status(self, request):
@@ -243,7 +243,7 @@ class MPCHC_Proxy_Client(object):
             template_values['{BODY}'] = 'Command {} accepted.'.format(command_id)
 
         page_text = await self._render_template(TEMPLATE, template_values=template_values)
-        return web.Response(text=page_text)
+        return web.Response(text=page_text, content_type='text/html')
 
 
 if __name__ == "__main__":
