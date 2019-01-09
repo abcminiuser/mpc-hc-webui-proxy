@@ -88,7 +88,7 @@ class MPCHC_Proxy_Client(object):
 
             with aiohttp.Timeout(1):
                 await self.session.get('http://127.0.0.1:{}/command.html'.format(self.port), params=data)
-        except Exception as e:
+        except Exception:
             pass
 
     async def _get_variables(self):
@@ -99,7 +99,7 @@ class MPCHC_Proxy_Client(object):
             with aiohttp.Timeout(1):
                 res = await self.session.get('http://127.0.0.1:{}/variables.html'.format(self.port))
                 raw = await res.text()
-        except Exception as e:
+        except Exception:
             return dict()
 
         mpchc_variables_raw = re.findall(r'<p id="(.+?)">(.+?)</p>', raw)
