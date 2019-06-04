@@ -79,27 +79,27 @@ class MPCHC_Proxy_Client(object):
 
     async def _send_command(self, command_id):
         if self.session is None:
-            self.session = aiohttp.ClientSession()
+            timeout = aiohttp.ClientTimeout(total=1)
+            self.session = aiohttp.ClientSession(timeout=timeout)
 
         try:
             data = {
                 "wm_command": command_id
             }
 
-            with aiohttp.Timeout(1):
-                await self.session.get('http://127.0.0.1:{}/command.html'.format(self.port), params=data)
-        except Exception:
+            await self.session.get('http://127.0.0.1:{}/command.html'.format(self.port), params=data)
+        except aiohttp.ClientError:
             pass
 
     async def _get_variables(self):
         if self.session is None:
-            self.session = aiohttp.ClientSession()
+            timeout = aiohttp.ClientTimeout(total=1)
+            self.session = aiohttp.ClientSession(timeout=timeout)
 
         try:
-            with aiohttp.Timeout(1):
-                res = await self.session.get('http://127.0.0.1:{}/variables.html'.format(self.port))
-                raw = await res.text()
-        except Exception:
+            res = await self.session.get('http://127.0.0.1:{}/variables.html'.format(self.port))
+            raw = await res.text()
+        except aiohttp.ClientError:
             return dict()
 
         mpchc_variables_raw = re.findall(r'<p id="(.+?)">(.+?)</p>', raw)

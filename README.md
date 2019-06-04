@@ -8,11 +8,12 @@ This script acts as a form of local proxy/firewall, emulating a limited version 
 
 ## Dependencies
 
-Python 3.5 or newer is required. The `aiohttp` library is also required:
+Python 3.5 or newer is required. To install the required library dependencies, use:
 
 ```
-pip install aiohttp
+pip install -r requirements.txt
 ```
+
 
 ## Feature Support
 
